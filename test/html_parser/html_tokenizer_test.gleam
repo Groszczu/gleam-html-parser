@@ -4,7 +4,7 @@ import gleam/map
 import gleeunit
 import gleeunit/should
 import html_parser/html_tokenizer.{
-  EndOfFileToken, EndTagToken, StartTagToken, TagTokenProps,
+  CharacterToken, EndOfFileToken, EndTagToken, StartTagToken, TagTokenProps,
 }
 
 pub fn main() {
@@ -13,11 +13,19 @@ pub fn main() {
 
 // gleeunit test functions end in `_test`
 pub fn tokenize_test() {
-  assert Ok(tokens) = html_tokenizer.tokenize("<div />")
+  assert Ok(tokens) = html_tokenizer.tokenize("<div>test</div>")
 
   should.equal(
     tokens,
-    [StartTagToken(TagTokenProps("div", True, map.new(), True)), EndOfFileToken],
+    [
+      StartTagToken(TagTokenProps("div", False, map.new(), True)),
+      CharacterToken("t"),
+      CharacterToken("e"),
+      CharacterToken("s"),
+      CharacterToken("t"),
+      EndTagToken(TagTokenProps("div", False, map.new(), False)),
+      EndOfFileToken,
+    ],
   )
 
   assert Ok(tokens) =
