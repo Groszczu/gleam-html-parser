@@ -1,28 +1,55 @@
 import gleam/io
-import html_parser/html_element.{HTMLElement}
+import gleam/string
+import html_parser/html_element.{
+  HTMLElement, TextNode, append_child, insert_attribute, new, to_node,
+}
 
-pub fn parse(_html_content: String) -> List(HTMLElement) {
-  [html_element.new("a")]
+type ParserState {
+  ParserState(root_element: HTMLElement, stack: List(HTMLElement))
+}
+
+pub type ParserError {
+  StackNotEmpty
+}
+
+pub fn parse(input: String) -> Result(HTMLElement, ParserError) {
+  do_parse(
+    string.to_graphemes(input),
+    ParserState(root_element: new("root"), stack: []),
+  )
+}
+
+fn do_parse(
+  input: List(String),
+  state: ParserState,
+) -> Result(HTMLElement, ParserError) {
+  let ParserState(root_element: root_element, stack: stack) = state
+  case input, stack {
+    [], [] -> Ok(root_element)
+    [], _ -> Error(StackNotEmpty)
+    ["<", ..input], _ -> Ok(root_element)
+  }
 }
 
 pub fn main() {
   let root =
-    html_element.new("div")
-    |> html_element.insert_attribute("role", "main")
-    |> html_element.insert_attribute("title", "main")
+    new("div")
+    |> insert_attribute("role", "main")
+    |> insert_attribute("title", "main")
+    |> append_child(TextNode("Root"))
 
   let li =
-    html_element.new("li")
-    |> html_element.insert_attribute("role", "listitem")
+    new("li")
+    |> insert_attribute("role", "listitem")
   let ul =
-    html_element.new("ul")
-    |> html_element.prepend_child(li)
-    |> html_element.prepend_child(li)
+    new("ul")
+    |> append_child(to_node(li))
+    |> append_child(to_node(li))
 
   let root =
     root
-    |> html_element.prepend_child(ul)
-    |> html_element.prepend_child(html_element.new("span"))
+    |> append_child(to_node(ul))
+    |> append_child(to_node(new("span")))
 
   io.println(html_element.to_string(root))
 }

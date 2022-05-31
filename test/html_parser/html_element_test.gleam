@@ -57,13 +57,13 @@ pub fn to_string_test() {
     |> html_element.insert_attribute("role", "listitem")
   let ul =
     html_element.new("ul")
-    |> html_element.prepend_child(li)
-    |> html_element.prepend_child(li)
+    |> html_element.prepend_child(html_element.to_node(li))
+    |> html_element.prepend_child(html_element.to_node(li))
 
   let root =
     root
-    |> html_element.prepend_child(ul)
-    |> html_element.prepend_child(html_element.new("span"))
+    |> html_element.prepend_child(html_element.to_node(ul))
+    |> html_element.prepend_child(html_element.to_node(html_element.new("span")))
 
   root
   |> html_element.to_string()

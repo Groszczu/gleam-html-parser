@@ -7,12 +7,21 @@ pub type HTMLElement {
   HTMLElement(
     tag_name: String,
     attributes: Map(String, String),
-    children: List(HTMLElement),
+    children: List(HTMLNode),
   )
+}
+
+pub type HTMLNode {
+  ElementNode(element: HTMLElement)
+  TextNode(text: String)
 }
 
 pub fn new(tag_name: String) -> HTMLElement {
   HTMLElement(tag_name: tag_name, attributes: map.new(), children: [])
+}
+
+pub fn to_node(html_element: HTMLElement) -> HTMLNode {
+  ElementNode(html_element)
 }
 
 pub fn to_string(html_element: HTMLElement) -> String {
@@ -60,7 +69,7 @@ fn do_to_string(html_element: HTMLElement, depth: Int) -> String {
         ">",
         "\n",
         children
-        |> list.map(do_to_string(_, depth + 1))
+        |> list.map(node_to_string(_, depth + 1))
         |> string.join("\n"),
         "\n",
         indentation,
@@ -68,6 +77,14 @@ fn do_to_string(html_element: HTMLElement, depth: Int) -> String {
         tag_name,
         " />",
       ])
+  }
+}
+
+fn node_to_string(html_node: HTMLNode, depth: Int) -> String {
+  let indentation = string.repeat("\t", depth)
+  case html_node {
+    TextNode(text) -> string.append(indentation, text)
+    ElementNode(element) -> do_to_string(element, depth)
   }
 }
 
@@ -89,8 +106,12 @@ pub fn insert_attribute(
   )
 }
 
-pub fn prepend_child(parent: HTMLElement, child: HTMLElement) -> HTMLElement {
+pub fn prepend_child(parent: HTMLElement, child: HTMLNode) -> HTMLElement {
   HTMLElement(..parent, children: [child, ..parent.children])
+}
+
+pub fn append_child(parent: HTMLElement, child: HTMLNode) -> HTMLElement {
+  HTMLElement(..parent, children: list.append(parent.children, [child]))
 }
 
 pub fn reverse_children(html_element: HTMLElement) -> HTMLElement {
