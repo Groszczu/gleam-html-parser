@@ -3,6 +3,7 @@ import gleam/function.{compose}
 import gleam/map
 import gleeunit
 import gleeunit/should
+import html_parser/errors
 import html_parser/html_tokenizer.{
   CharacterToken, EndOfFileToken, EndTagToken, StartTagToken, TagTokenProps,
 }
@@ -47,6 +48,15 @@ pub fn tokenize_test() {
     ],
   )
 
-  ["<div <", "<a role=''img' />", "<div><a /a><div>"]
-  |> list.each(compose(html_tokenizer.tokenize, should.be_error))
+  [
+    #("<div <", errors.UnexpectedCharacterInAttributeName),
+    #("<a role=''img' />", errors.MissingWhitespaceBetweenAttributes),
+    #("<div><a /a><div>", errors.UnexpectedSolidusInTag),
+    #("<a role=>", errors.MissingAttributeValue),
+  ]
+  |> list.each(fn(test_case) {
+    test_case.0
+    |> html_tokenizer.tokenize
+    |> should.equal(Error(test_case.1))
+  })
 }

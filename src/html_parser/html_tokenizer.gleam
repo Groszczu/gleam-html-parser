@@ -2,6 +2,7 @@ import gleam/list
 import gleam/map.{Map}
 import gleam/string
 import gleam/regex
+import html_parser/errors.{HTMLParserError}
 
 type TokenizerState {
   // TODO: CharacterReferenceInAttributeValueState(allowed_char: String)
@@ -52,8 +53,8 @@ pub type Token {
   EndOfFileToken
 }
 
-/// Tokenizer implementation base on the https://www.w3.org/TR/2011/WD-html5-20110113/tokenization.html
-pub fn tokenize(input) {
+/// Tokenizer implementation based on the https://html.spec.whatwg.org/multipage/parsing.html#tokenization
+pub fn tokenize(input) -> Result(List(Token), HTMLParserError) {
   do_tokenize(string.to_graphemes(input), DataState, [])
 }
 
@@ -127,44 +128,37 @@ fn tokenize_tag_open_state(input: List(String), acc: List(Token)) {
             ),
             acc,
           )
-        False -> Error(string.append("Error in TagOpenState, char: ", char))
+        False -> Error(errors.InvalidFirstCharacterOfTagName)
       }
+    [] -> Error(errors.EOFBeforeTagName)
   }
 }
 
 fn tokenize_end_tag_open_state(input: List(String), acc: List(Token)) {
   case input {
-    [">", ..] -> Error("Error in EndTagOpenState")
-    [char, ..rest] ->
+    [">", ..] -> Error(errors.MissingEndTagName)
+    [char, ..] ->
       case is_letter(char) {
         True ->
-          do_tokenize(
-            rest,
-            TagNameState(
-              char
-              |> string.lowercase
-              |> new_end_tag_token_props,
-            ),
-            acc,
-          )
-        False -> Error("Error in EndTagOpenState")
+          do_tokenize(input, TagNameState(new_end_tag_token_props("")), acc)
+        False -> Error(errors.InvalidFirstCharacterOfTagName)
       }
-    [] -> Error("Error in EndTagOpenState")
+    [] -> Error(errors.EOFBeforeTagName)
   }
 }
 
 fn tokenize_tag_name_state(input: List(String), acc: List(Token), tag_props) {
   // TODO: add "NULL" handler
   case input {
+    [" ", ..rest] | ["\t", ..rest] | ["\n", ..rest] | ["\f", ..rest] ->
+      do_tokenize(rest, BeforeAttributeNameState(tag_props), acc)
     ["/", ..rest] -> do_tokenize(rest, SelfClosingStartTagState(tag_props), acc)
     [">", ..rest] ->
       do_tokenize(rest, DataState, [new_tag_token(tag_props), ..acc])
 
-    [" ", ..rest] | ["\t", ..rest] | ["\n", ..rest] | ["\f", ..rest] ->
-      do_tokenize(rest, BeforeAttributeNameState(tag_props), acc)
     [char, ..rest] ->
       tokenize_tag_name_state(rest, acc, append_to_tags_name(tag_props, char))
-    [] -> Error("Error in TagNameState")
+    [] -> Error(errors.EOFInTag)
   }
 }
 
@@ -180,8 +174,8 @@ fn tokenize_self_closing_start_tag_state(input, acc, tag_props) {
           ..acc
         ],
       )
-    [_, ..] -> Error("Error in SelfClosingStartTagState")
-    [] -> Error("Error in SelfClosingStartTagState")
+    [_, ..] -> Error(errors.UnexpectedSolidusInTag)
+    [] -> Error(errors.EOFInTag)
   }
 }
 
@@ -191,45 +185,36 @@ fn tokenize_before_attribute_name_state(input, acc, tag_props) {
     [" ", ..rest] | ["\t", ..rest] | ["\n", ..rest] | ["\f", ..rest] ->
       // ignore
       tokenize_before_attribute_name_state(rest, acc, tag_props)
-    ["/", ..rest] -> do_tokenize(rest, SelfClosingStartTagState(tag_props), acc)
-    [">", ..rest] ->
-      do_tokenize(rest, DataState, [new_tag_token(tag_props), ..acc])
 
-    ["\"", ..] | ["'", ..] | ["<", ..] | ["=", ..] ->
-      Error("Error in BeforeAttributeNameState")
-    [char, ..rest] ->
-      do_tokenize(rest, AttributeNameState(tag_props, new_attribute(char)), acc)
-    [] -> Error("Error in BeforeAttributeNameState")
+    // ["/", ..rest] -> do_tokenize(rest, SelfClosingStartTagState(tag_props), acc)
+    // [">", ..rest] ->
+    //   do_tokenize(rest, DataState, [new_tag_token(tag_props), ..acc])
+    ["/", ..] | [">", ..] | [] ->
+      do_tokenize(
+        input,
+        AfterAttributeNameState(tag_props, new_attribute("")),
+        acc,
+      )
+    ["=", ..] -> Error(errors.UnexpectedEqualsSignBeforeAttributeName)
+
+    [_, ..] ->
+      do_tokenize(input, AttributeNameState(tag_props, new_attribute("")), acc)
   }
 }
 
 fn tokenize_attribute_name_state(input, acc, tag_props, attribute) {
   // TODO: add "NULL" handler
   case input {
-    [" ", ..rest] | ["\t", ..rest] | ["\n", ..rest] | ["\f", ..rest] ->
-      do_tokenize(rest, AfterAttributeNameState(tag_props, attribute), acc)
-    ["/", ..rest] ->
-      do_tokenize(
-        rest,
-        SelfClosingStartTagState(set_attribute(tag_props, attribute)),
-        acc,
-      )
+    [] | [" ", ..] | ["\t", ..] | ["\n", ..] | ["\f", ..] | ["/", ..] | [
+      ">",
+      ..
+    ] -> do_tokenize(input, AfterAttributeNameState(tag_props, attribute), acc)
 
     ["=", ..rest] ->
       do_tokenize(rest, BeforeAttributeValueState(tag_props, attribute), acc)
 
-    [">", ..rest] ->
-      do_tokenize(
-        rest,
-        DataState,
-        [
-          tag_props
-          |> set_attribute(attribute)
-          |> new_tag_token,
-          ..acc
-        ],
-      )
-    ["\"", ..] | ["'", ..] | ["<", ..] -> Error("Error in AttributeNameState")
+    ["\"", ..] | ["'", ..] | ["<", ..] ->
+      Error(errors.UnexpectedCharacterInAttributeName)
     [char, ..rest] ->
       tokenize_attribute_name_state(
         rest,
@@ -237,7 +222,6 @@ fn tokenize_attribute_name_state(input, acc, tag_props, attribute) {
         tag_props,
         append_to_attributes_name(attribute, char),
       )
-    [] -> Error("Error in AttributeNameState")
   }
 }
 
@@ -266,18 +250,16 @@ fn tokenize_after_attribute_name_state(input, acc, tag_props, attribute) {
           ..acc
         ],
       )
-    ["\"", ..] | ["'", ..] | ["<", ..] ->
-      Error("Error in AfterAttributeNameState")
-    [char, ..rest] ->
+    [_, ..] ->
       do_tokenize(
-        rest,
+        input,
         AttributeNameState(
           set_attribute(tag_props, attribute),
-          new_attribute(char),
+          new_attribute(""),
         ),
         acc,
       )
-    [] -> Error("Error in AfterAttributeNameState")
+    [] -> Error(errors.EOFInTag)
   }
 }
 
@@ -293,33 +275,19 @@ fn tokenize_before_attribute_value_state(input, acc, tag_props, attribute) {
         AttributeValueState(tag_props, attribute, DoubleQuoted),
         acc,
       )
-    ["&", ..] ->
-      do_tokenize(
-        // reconsume "&"
-        input,
-        AttributeValueState(tag_props, attribute, Unquoted),
-        acc,
-      )
     ["'", ..rest] ->
       do_tokenize(
         rest,
         AttributeValueState(tag_props, attribute, SingleQuoted),
         acc,
       )
-    [">", ..] -> Error("Error in BeforeAttributeValueState")
-    ["<", ..] | ["=", ..] | ["`", ..] ->
-      Error("Error in BeforeAttributeValueState")
-    [char, ..rest] ->
+    [">", ..] -> Error(errors.MissingAttributeValue)
+    _ ->
       do_tokenize(
-        rest,
-        AttributeValueState(
-          tag_props,
-          append_to_attributes_value(attribute, char),
-          Unquoted,
-        ),
+        input,
+        AttributeValueState(tag_props, attribute, Unquoted),
         acc,
       )
-    [] -> Error("Error in BeforeAttributeValueState")
   }
 }
 
@@ -346,7 +314,7 @@ fn get_tokenize_attribute_value_state_handler(qoute_char) {
           tag_props,
           append_to_attributes_value(attribute, char),
         )
-      [] -> Error("Error in AttributeValueState")
+      [] -> Error(errors.EOFInTag)
     }
   }
 }
@@ -374,7 +342,7 @@ fn tokenize_attribute_value_unqouted_state(input, acc, tag_props, attribute) {
         ],
       )
     ["\"", ..] | ["'", ..] | ["<", ..] | ["=", ..] | ["`", ..] ->
-      Error("Error in AttributeValueState (Unqouted)")
+      Error(errors.UnexpectedCharacterInAttributeName)
     [char, ..rest] ->
       tokenize_attribute_value_unqouted_state(
         rest,
@@ -382,7 +350,7 @@ fn tokenize_attribute_value_unqouted_state(input, acc, tag_props, attribute) {
         tag_props,
         append_to_attributes_value(attribute, char),
       )
-    [] -> Error("Error in AttributeValueState (Unqouted)")
+    [] -> Error(errors.EOFInTag)
   }
 }
 
@@ -393,8 +361,8 @@ fn tokenize_after_attribute_value_state(input, acc, tag_props) {
     ["/", ..rest] -> do_tokenize(rest, SelfClosingStartTagState(tag_props), acc)
     [">", ..rest] ->
       do_tokenize(rest, DataState, [new_tag_token(tag_props), ..acc])
-    [_, ..] -> Error("Error in AfterAttributeValueState")
-    [] -> Error("Error in AfterAttributeValueState")
+    [_, ..] -> Error(errors.MissingWhitespaceBetweenAttributes)
+    [] -> Error(errors.EOFInTag)
   }
 }
 
@@ -419,12 +387,16 @@ fn new_attribute(char) {
 }
 
 fn set_attribute(tag_props, attribute) {
-  TagTokenProps(
-    ..tag_props,
-    attributes: tag_props.attributes
-    // TODO: map insert will overwrite existing attributes. We should check if current attribute is not present and return Error otherwise
-    |> map.insert(attribute.0, attribute.1),
-  )
+  case attribute.0 {
+    "" -> tag_props
+    _ ->
+      TagTokenProps(
+        ..tag_props,
+        attributes: tag_props.attributes
+        // TODO: map insert will overwrite existing attributes. We should check if current attribute is not present and return Error otherwise
+        |> map.insert(attribute.0, attribute.1),
+      )
+  }
 }
 
 fn append_to_tags_name(tag_props, char) {

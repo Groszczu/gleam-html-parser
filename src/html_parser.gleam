@@ -1,5 +1,6 @@
 import gleam/io
 import gleam/string
+import html_parser/errors.{HTMLParserError}
 import html_parser/html_element.{
   HTMLElement, TextNode, append_child, insert_attribute, new, to_node,
 }
@@ -8,11 +9,7 @@ type ParserState {
   ParserState(root_element: HTMLElement, stack: List(HTMLElement))
 }
 
-pub type ParserError {
-  StackNotEmpty
-}
-
-pub fn parse(input: String) -> Result(HTMLElement, ParserError) {
+pub fn parse(input: String) -> Result(HTMLElement, HTMLParserError) {
   do_parse(
     string.to_graphemes(input),
     ParserState(root_element: new("root"), stack: []),
@@ -22,11 +19,11 @@ pub fn parse(input: String) -> Result(HTMLElement, ParserError) {
 fn do_parse(
   input: List(String),
   state: ParserState,
-) -> Result(HTMLElement, ParserError) {
+) -> Result(HTMLElement, HTMLParserError) {
   let ParserState(root_element: root_element, stack: stack) = state
   case input, stack {
     [], [] -> Ok(root_element)
-    [], _ -> Error(StackNotEmpty)
+    [], _ -> Error(errors.StackNotEmpty)
     ["<", ..input], _ -> Ok(root_element)
   }
 }
