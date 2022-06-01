@@ -5,10 +5,14 @@ pub type HTMLParserError {
   UnexpectedEqualsSignBeforeAttributeName
   UnexpectedCharacterInAttributeName
   UnexpectedCharacterInUnquotedAttributeValue
+  UnexpectedEndTagBeforeStartTag
+  UnexpectedNotMatchingEndTag
   MissingEndTagName
   MissingAttributeValue
   MissingWhitespaceBetweenAttributes
   EOFBeforeTagName
   EOFInTag
   InvalidFirstCharacterOfTagName
+
+  NotImplemented
 }

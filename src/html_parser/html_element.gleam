@@ -95,6 +95,13 @@ pub fn set_attributes(
   HTMLElement(..html_element, attributes: map.from_list(attributes))
 }
 
+pub fn set_attributes_map(
+  html_element: HTMLElement,
+  attributes: Map(String, String),
+) -> HTMLElement {
+  HTMLElement(..html_element, attributes: attributes)
+}
+
 pub fn insert_attribute(
   html_element: HTMLElement,
   name: String,
@@ -104,6 +111,13 @@ pub fn insert_attribute(
     ..html_element,
     attributes: map.insert(html_element.attributes, name, value),
   )
+}
+
+pub fn set_children(
+  parent: HTMLElement,
+  children: List(HTMLNode),
+) -> HTMLElement {
+  HTMLElement(..parent, children: children)
 }
 
 pub fn prepend_child(parent: HTMLElement, child: HTMLNode) -> HTMLElement {
