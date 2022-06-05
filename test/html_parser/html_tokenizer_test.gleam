@@ -1,5 +1,4 @@
 import gleam/list
-import gleam/function.{compose}
 import gleam/map
 import gleeunit
 import gleeunit/should
